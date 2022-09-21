@@ -1,0 +1,33 @@
+#author- naveen. S
+#this script consists of the deployment commands to create :Image Template and build the image version.
+# requirements- Imagedefinition, Imageresourcegroup, Imagetemplatename and Template file, in this case it will be Azurerops-template.json.
+
+
+$imageResourceGroup = "AVDImagebuilderDemoRg"
+$templateFilePath = ".\Dev_AIB_Pooled\template.json"
+$imagetemplatename = "pooledimage5"
+$location="West Europe"
+$api='2021-10-01'
+
+
+
+# Run the deployment
+#New-AzResourceGroupDeployment -ResourceGroupName $imageResourceGroup -TemplateFile $templateFilePath `
+#-api-version "2019-05-01-preview" -imageTemplateName $imageTemplateName -svclocation $location
+
+New-AzResourceGroupDeployment -ResourceGroupName $imageResourceGroup -TemplateFile $templateFilePath `
+    -api-version $api -imageTemplateName $imageTemplateName -svclocation $location
+
+start-sleep -Seconds 50
+
+# Verify the template
+$status= Get-AzImageBuilderTemplate -ImageTemplateName $imageTemplateName -ResourceGroupName $imageResourceGroup |
+Select-Object -Property Name, LastRunStatusRunState, LastRunStatusMessage, ProvisioningState, ProvisioningErrorMessage
+
+
+
+# Start the Image Build Process
+if($status.ProvisioningState -eq "Succeeded" ){
+Start-AzImageBuilderTemplate -ResourceGroupName $imageResourceGroup -Name $imageTemplateName
+write-host "Initiated Image builder, it might take some time the build timeout is set to 90 minutes"
+}

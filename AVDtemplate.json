@@ -1,0 +1,146 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "imageTemplateName": {
+        "type": "string"
+      },
+      "api-version": {
+        "type": "string"
+      },
+      "svclocation": {
+        "type": "string"
+      }
+    },
+    "variables": {},
+    "resources": [
+      {
+        "name": "[parameters('imageTemplateName')]",
+        "type": "Microsoft.VirtualMachineImages/imageTemplates",
+        "apiVersion": "[parameters('api-version')]",
+        "location": "[parameters('svclocation')]",
+        "dependsOn": [],
+        "tags": {
+          "imagebuilderTemplate": "win10Pooled",
+          "userIdentity": "enabled"
+        },
+        "identity": {
+          "type": "UserAssigned",
+          "userAssignedIdentities": {
+            "/subscriptions/0df88c47-c960-4a1b-8ff3-e303a864422d/resourcegroups/AVDImagebuilderDemoRg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/myIdentity1234": {}
+          }
+        },
+        "properties": {
+          "buildTimeoutInMinutes": 120,
+          "vmProfile": {
+            "vmSize": "Standard_D2_v3",
+            "osDiskSizeGB": 127,
+            "vnetConfig": {
+                        "name": "vnet-weu-wvd-nonprod",
+                        "subnetName": "subn-weu-default",
+                        "resourceGroupName": "rg-weu-network-vdi-nonprod",
+                        "subnetId":"/subscriptions/0df88c47-c960-4a1b-8ff3-e303a864422d/resourceGroups/rg-weu-network-vdi-nonprod/providers/Microsoft.Network/virtualNetworks/vnet-weu-wvd-nonprod/subnets/subn-weu-default"
+                }
+          },
+          "source": {
+            "type": "PlatformImage",
+            "publisher": "MicrosoftWindowsDesktop",
+            //"offer": "windows-10",
+            "offer": "office-365",
+            //"sku": "win10-21h2-avd",
+            "sku": "win10-21h2-avd-m365",
+            "version": "latest"
+          },
+          "customize": [
+                    {
+            "type": "PowerShell",
+            "name": "GetAzCopy",
+            "inline": [
+              "New-Item -Type Directory -Path 'c:\\' -Name apps",
+              "invoke-webrequest -uri 'https://aka.ms/downloadazcopy-v10-windows' -OutFile 'c:\\apps\\azcopy.zip'",
+              "Expand-Archive 'c:\\apps\\azcopy.zip' 'c:\\apps'",
+              "copy-item 'C:\\apps\\azcopy_windows_amd64_*\\azcopy.exe\\' -Destination 'c:\\apps'"
+            ]
+          },
+          {
+            "type": "PowerShell",
+            "name": "GetArchive",
+            "inline": [
+              "c:\\apps\\azcopy.exe copy 'https://stwvdinstallqa.blob.core.windows.net/aib/AVDapps.zip?sp=r&st=2022-09-21T07:40:59Z&se=2022-09-21T15:40:59Z&spr=https&sv=2021-06-08&sr=b&sig=qRAGvMhSLpTPZSioW22BUUlBSzN9VnDp8fSGr8Mps2M%3D' c:\\apps\\AVDapps.zip",
+              "Expand-Archive 'c:\\apps\\AVDapps.zip' c:\\apps"
+            ]
+          },      
+                    {
+                        "type": "PowerShell",
+                        "name": "install apps",
+                        "runElevated": true,
+                        "runAsSystem": true,
+                        "scriptUri": "https://raw.githubusercontent.com/ramoj25/AIB/main/installpooledapps.ps1"
+                    },
+
+                                    
+                     {
+                         "type": "WindowsUpdate",
+                         "searchCriteria": "IsInstalled=0",
+                         "filters": [
+                             "exclude:$_.Title -like '*Preview*'",
+                             "include:$true"
+                                     ],
+                         "updateLimit": 40
+                     },
+                      {
+                    "type": "PowerShell",
+                    "runElevated": true,
+                    "name": "Deletingappssource",
+                    "inline": [
+                       "Remove-Item c:\\apps -Recurse",
+                       "write-host 'AIB customization- Deletion of application source'"
+                       ]
+                     },
+                     {
+                        "type": "WindowsRestart",
+                        "restartCheckCommand": "write-host 'restarting post deletion of appsource folder'",
+                        "restartTimeout": "5m"
+                    },
+                    {
+                      "type": "PowerShell",
+                      "name": "OptimizeOS",
+                      "runElevated": true,
+                      "runAsSystem": true,
+                      "scriptUri": "https://raw.githubusercontent.com/ramoj25/AIB/main/usingVDOT.ps1"
+                    },
+
+                    {
+                    "type": "PowerShell",
+                    "runElevated": true,
+                    "name": "DeprovisioningScript",
+                    "inline": [
+                      "((Get-Content -path C:\\DeprovisioningScript.ps1 -Raw) -replace 'Sysprep.exe /oobe /generalize /quiet /quit','Sysprep.exe /oobe /generalize /quit /mode:vm' ) | Set-Content -Path C:\\DeprovisioningScript.ps1"
+                      ]
+ }
+          ],
+          "distribute": [
+            {
+              "type": "SharedImage",
+              "galleryImageId": "/subscriptions/0df88c47-c960-4a1b-8ff3-e303a864422d/resourceGroups/AVDImageDemoRg/providers/Microsoft.Compute/galleries/myaibsig01/images/win10avd",
+              "location": "westeurope",
+              "runOutputName": "win10Client",
+              "artifactTags": {
+                "source": "azVmImageBuilder",
+                "baseosimg": "windows10Pooled"
+              },
+              "replicationRegions": [
+                      "westeurope"
+                    ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+  
+
+
+
+
+
